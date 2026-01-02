@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Weather Station — Pro Dashboard</title>
+<link rel="icon" type="image/png" href="weatherico.png">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+html{height:100%}
+:root{
+  --bg1:#04000c;
+  --bg2:#1a0437;
+  --card:#0a1a24;
+  --accent:#00e4ff;
+  --text:#ffffff;
+}
+.light{
+  --bg1:#f1f4ff;
+  --bg2:#ffffff;
+  --card:#ffffff;
+  --accent:#005eff;
+  --text:#111;
+}
+body{
+  margin:0;
+  font-family:Segoe UI,Roboto,sans-serif;
+  background:radial-gradient(circle at top,var(--bg2),var(--bg1));
+  color:var(--text);
+}
+header{
+  text-align:center;
+  padding:20px;
+  font-size:32px;
+  font-weight:900;
+}
+.controls{text-align:center;margin-bottom:16px}
+button{
+  background:var(--accent);
+  border:none;
+  padding:10px 18px;
+  border-radius:14px;
+  margin:6px;
+  font-weight:700;
+  cursor:pointer;
+  box-shadow:0 0 18px #00e4ff66;
+}
+.grid{
+  display:grid;
+  grid-template-columns:300px 1fr 320px;
+  gap:28px;
+  padding:24px;
+}
+.card{
+  background:linear-gradient(145deg,#081821,#0c2a3a);
+  border-radius:22px;
+  padding:18px;
+  box-shadow:0 0 35px #0008;
+}
+.card h3{
+  margin:0 0 10px;
+  color:var(--accent);
+}
+.value{
+  font-size:36px;
+  font-weight:900;
+}
+
+/* SENSOR ERROR */
+.card.sensor-error{
+  background:linear-gradient(145deg,#3a0b0b,#5c1111);
+  box-shadow:0 0 35px #ff3b3baa;
+}
+
+/* LEFT */
+.left{display:flex;flex-direction:column;gap:22px}
+.left .card{min-height:110px}
+
+/* CENTER */
+.chart-card{height:620px}
+canvas{width:100%!important;height:94%!important}
+
+/* RIGHT */
+.right{display:flex;flex-direction:column;gap:22px}
+
+/* AQI COLORS */
+.aqi-good{color:#7dff9a}
+.aqi-moderate{color:#ffd166}
+.aqi-bad{color:#ff4d6d}
+.aqi-verybad{color:#ff1a1a}
+
+/* ========================= */
+/* 🔮 NEON PRESSURE GAUGE */
+/* ========================= */
+.gauge-wrap{
+  position:relative;
+  width:260px;
+  height:260px;
+  margin:auto;
+}
+
+.gauge svg{
+  width:100%;
+  height:100%;
+  transform:rotate(-90deg);
+}
+
+/* Glass background */
+.gauge-glass{
+  position:absolute;
+  inset:22px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(14px);
+  box-shadow:
+    inset 0 0 25px rgba(255,255,255,0.12),
+    inset 0 0 60px rgba(0,228,255,0.12);
+}
+
+/* background ring */
+.ring-bg{
+  fill:none;
+  stroke:#062b36;
+  stroke-width:26;
+  opacity:0.55;
+}
+
+/* animated neon ring */
+.ring-fg{
+  fill:none;
+  stroke:url(#pressureGradient);
+  stroke-width:26;
+  stroke-linecap:round;
+  stroke-dasharray:565;
+  stroke-dashoffset:565;
+  transition:
+    stroke-dashoffset .8s cubic-bezier(.4,0,.2,1),
+    filter .6s;
+  filter:
+    drop-shadow(0 0 18px currentColor)
+    drop-shadow(0 0 40px currentColor);
+  animation:pulse 3s infinite ease-in-out;
+}
+
+@keyframes pulse{
+  0%,100%{filter:drop-shadow(0 0 20px currentColor)}
+  50%{filter:drop-shadow(0 0 55px currentColor)}
+}
+
+/* center text */
+.gauge-center{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+
+.gauge-center .big{
+  font-size:34px;
+  font-weight:900;
+  background:linear-gradient(180deg,#ffffff,#9befff);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  text-shadow:
+    0 0 12px currentColor,
+    0 0 25px currentColor;
+}
+
+.gauge-center .sub{
+  font-size:13px;
+  font-weight:700;
+  opacity:.85;
+  letter-spacing:1px;
+}
+
+/* WEATHER */
+.weather{
+  font-size:30px;
+  font-weight:900;
+  text-align:center;
+}
+
+/* TOAST */
+#toast{
+  position:fixed;
+  bottom:24px;
+  right:24px;
+  background:linear-gradient(145deg,#0c2c3d,#0f5c78);
+  padding:14px 22px;
+  border-radius:18px;
+  font-weight:800;
+  box-shadow:0 0 30px #00e4ffaa;
+  display:none;
+}
+</style>
+</head>
+
+<body>
+<header>Weather Station — Pro Dashboard</header>
+
+<div class="controls">
+  <button onclick="connect()">🔌 Connect Arduino</button>
+  <button onclick="simulate()">⚡ Simulate Data</button>
+  <button onclick="exportCSV()">📤 Export CSV</button>
+  <button onclick="clearData()">🗑 Clear Data</button>
+  <button onclick="toggleMode()">🌓 Dark/Light Mode</button>
+</div>
+
+<div class="grid">
+
+  <!-- LEFT -->
+  <div class="left">
+    <div class="card" id="tempCard"><h3>🌡️ Temperature</h3><div class="value" id="temp">-- °C</div></div>
+    <div class="card" id="humCard"><h3>💧 Humidity</h3><div class="value" id="hum">-- %</div></div>
+    <div class="card" id="altCard"><h3>🗻 Altitude</h3><div class="value" id="alt">-- m</div></div>
+    <div class="card" id="rainCard"><h3>🌧️ Rain</h3><div class="value" id="rain">--</div></div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="card chart-card">
+    <h3>📊 Sensor Graphs</h3>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+
+    <div class="card" id="aqiCard">
+      <h3>🫁 AQI</h3>
+      <div class="value" id="aqiVal">--</div>
+      <div id="aqiText">--</div>
+    </div>
+
+    <div class="card" id="pressCard">
+      <h3>🔮 Atmospheric Pressure</h3>
+
+      <div class="gauge-wrap gauge">
+        <svg viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="pressureGradient" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="200" y2="200">
+              <stop offset="0%" stop-color="#4da6ff"/>
+              <stop offset="50%" stop-color="#00e4ff"/>
+              <stop offset="100%" stop-color="#b44cff"/>
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="90" class="ring-bg"/>
+          <circle cx="100" cy="100" r="90" class="ring-fg" id="ring"/>
+        </svg>
+
+        <div class="gauge-glass"></div>
+
+        <div class="gauge-center">
+          <div class="big" id="press">-- hPa</div>
+          <div class="sub">Atmospheric Pressure</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🌦️ Weather Condition</h3>
+      <div class="weather" id="weather">--</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= SUPABASE CONFIG ================= */
+const SUPABASE_URL =
+  "https://pdoleujjkhxczcqwuiah.supabase.co/rest/v1/weather_data?select=*&order=id.desc&limit=1";
+
+const SUPABASE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkb2xldWpqa2h4Y3pjcXd1aWFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNTA2MjMsImV4cCI6MjA4MjkyNjYyM30.L1y3B2PArmKL_wT5iozfdeKNbzsC0aKO1RJ9Dya7-O0";
+
+/* ================= UI REFERENCES ================= */
+let chart;
+const ctx = document.getElementById("chart");
+const rainEl = document.getElementById("rain");
+const rainCard = document.getElementById("rainCard");
+const ring = document.getElementById("ring");
+let lastPressure = null;
+
+/* ================= CHART ================= */
+chart = new Chart(ctx, {
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [
+      { label: "Temp", borderColor: "#00e4ff", data: [], tension: 0.4 },
+      { label: "Humidity", borderColor: "#ff4d9a", data: [], tension: 0.4 },
+      { label: "Pressure", borderColor: "#ffd166", data: [], tension: 0.4 },
+      { label: "AQI", borderColor: "#7df2a6", data: [], tension: 0.4 }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: "#aaa" } } },
+    scales: {
+      x: { ticks: { color: "#666" } },
+      y: { ticks: { color: "#666" } }
+    }
+  }
+});
+
+/* ================= SENSOR HANDLER ================= */
+function setSensor(cardId, elId, val, unit = "") {
+  const card = document.getElementById(cardId);
+  const el = document.getElementById(elId);
+
+  if (val === null || val === undefined || isNaN(val)) {
+    el.innerText = "Sensor Missing";
+    card.classList.add("sensor-error");
+    return null;
+  }
+  el.innerText = val + unit;
+  card.classList.remove("sensor-error");
+  return val;
+}
+
+/* ================= FETCH FROM SUPABASE ================= */
+async function fetchData() {
+  try {
+    const res = await fetch(SUPABASE_URL, {
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + SUPABASE_KEY
+      }
+    });
+
+    const json = await res.json();
+    if (!json.length) return;
+    const d = json[0];
+
+    const tempVal = setSensor("tempCard", "temp", d.dhttemp.toFixed(1), " °C");
+    const humVal  = setSensor("humCard", "hum", d.dhthumidity.toFixed(1), " %");
+    setSensor("altCard", "alt", d.altitude.toFixed(2), " m");
+
+    /* ================= RAIN (FIXED) ================= */
+    if (d.rainraw === 0) {
+      rainEl.innerText = "Raining 🌧️";
+      rainCard.classList.add("rain-active");
+    } else {
+      rainEl.innerText = "No Rain ☀️";
+      rainCard.classList.remove("rain-active");
+    }
+
+    /* ================= PRESSURE ================= */
+    const presVal = setSensor(
+      "pressCard",
+      "press",
+      d.pressure.toFixed(2),
+      " hPa"
+    );
+
+    if (presVal !== null) {
+      const percent = Math.min(1, Math.max(0, (presVal - 900) / 200));
+      ring.style.strokeDashoffset = 565 * (1 - percent);
+      ring.style.color =
+        lastPressure && presVal > lastPressure ? "#b44cff" : "#4da6ff";
+      lastPressure = presVal;
+    }
+
+    /* ================= AQI ================= */
+    const aqiVal = setSensor("aqiCard", "aqiVal", d.aqi, "");
+    const aqiText = document.getElementById("aqiText");
+
+    if (aqiVal !== null) {
+      if (aqiVal <= 50) {
+        aqiText.innerText = "Good";
+        aqiText.className = "aqi-good";
+      } else if (aqiVal <= 100) {
+        aqiText.innerText = "Moderate";
+        aqiText.className = "aqi-moderate";
+      } else if (aqiVal <= 200) {
+        aqiText.innerText = "Bad";
+        aqiText.className = "aqi-bad";
+      } else {
+        aqiText.innerText = "Very Bad";
+        aqiText.className = "aqi-verybad";
+      }
+    }
+
+    /* ================= WEATHER LOGIC (FIXED) ================= */
+    let weather = "☀️ Clear";
+    if (d.rainraw === 0) weather = "🌧️ Rainy";
+    else if (humVal >= 80) weather = "☁️ Cloudy";
+    else if (tempVal >= 30) weather = "🔥 Hot";
+    else if (tempVal <= 10) weather = "❄️ Cold";
+
+    document.getElementById("weather").innerText = weather;
+
+    /* ================= CHART UPDATE ================= */
+    chart.data.labels.push("");
+    chart.data.datasets[0].data.push(tempVal);
+    chart.data.datasets[1].data.push(humVal);
+    chart.data.datasets[2].data.push(presVal);
+    chart.data.datasets[3].data.push(aqiVal);
+
+    if (chart.data.labels.length > 40) {
+      chart.data.labels.shift();
+      chart.data.datasets.forEach(d => d.data.shift());
+    }
+    chart.update();
+
+  } catch (err) {
+    console.error("Fetch error:", err);
+  }
+}
+
+/* ================= LOOP ================= */
+setInterval(fetchData, 1000);
+fetchData();
+
+function clearData() {
+  chart.data.labels = [];
+  chart.data.datasets.forEach(d => (d.data = []));
+  chart.update();
+}
+
+function toggleMode() {
+  document.body.classList.toggle("light");
+}
+</script>
+
+</body>
+</html>
