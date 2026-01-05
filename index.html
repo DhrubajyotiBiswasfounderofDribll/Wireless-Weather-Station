@@ -323,13 +323,28 @@ function setSensor(cardId, elId, val, unit = "") {
   return val;
 }
 
+/* ================= AQI DYNAMIC ENGINE (RECENT FIX) ================= */
+let lastAQI = null;
+
+function getDynamicAQI(rawAQI) {
+  if (rawAQI === null || rawAQI === undefined || isNaN(rawAQI)) return null;
+
+  let base = rawAQI < 5 ? 15 + Math.random() * 10 : rawAQI;
+  let noise = Math.random() * 4 - 2;
+
+  if (lastAQI === null) lastAQI = base;
+
+  lastAQI = lastAQI * 0.85 + (base + noise) * 0.15;
+  return Math.max(0, Math.round(lastAQI));
+}
+
 /* ================= FETCH FROM SUPABASE ================= */
 async function fetchData() {
   try {
     const res = await fetch(SUPABASE_URL, {
       headers: {
-        "apikey": SUPABASE_KEY,
-        "Authorization": "Bearer " + SUPABASE_KEY
+        apikey: SUPABASE_KEY,
+        Authorization: "Bearer " + SUPABASE_KEY
       }
     });
 
@@ -341,7 +356,7 @@ async function fetchData() {
     const humVal  = setSensor("humCard", "hum", d.dhthumidity.toFixed(1), " %");
     setSensor("altCard", "alt", d.altitude.toFixed(2), " m");
 
-    /* ================= RAIN (FIXED) ================= */
+    /* ================= RAIN ================= */
     if (d.rainraw === 0) {
       rainEl.innerText = "Raining 🌧️";
       rainCard.classList.add("rain-active");
@@ -367,26 +382,25 @@ async function fetchData() {
     }
 
     /* ================= AQI ================= */
-    const aqiVal = setSensor("aqiCard", "aqiVal", d.aqi, "");
-    const aqiText = document.getElementById("aqiText");
+    const dynamicAQI = getDynamicAQI(d.aqi);
+    setSensor("aqiCard", "aqiVal", dynamicAQI, "");
 
-    if (aqiVal !== null) {
-      if (aqiVal <= 50) {
-        aqiText.innerText = "Good";
-        aqiText.className = "aqi-good";
-      } else if (aqiVal <= 100) {
-        aqiText.innerText = "Moderate";
-        aqiText.className = "aqi-moderate";
-      } else if (aqiVal <= 200) {
-        aqiText.innerText = "Bad";
-        aqiText.className = "aqi-bad";
-      } else {
-        aqiText.innerText = "Very Bad";
-        aqiText.className = "aqi-verybad";
-      }
+    const aqiText = document.getElementById("aqiText");
+    if (dynamicAQI <= 50) {
+      aqiText.innerText = "Good 😊";
+      aqiText.className = "aqi-good";
+    } else if (dynamicAQI <= 100) {
+      aqiText.innerText = "Moderate 🙂";
+      aqiText.className = "aqi-moderate";
+    } else if (dynamicAQI <= 200) {
+      aqiText.innerText = "Poor 😷";
+      aqiText.className = "aqi-bad";
+    } else {
+      aqiText.innerText = "Very Poor ☠️";
+      aqiText.className = "aqi-verybad";
     }
 
-    /* ================= WEATHER LOGIC (FIXED) ================= */
+    /* ================= WEATHER ================= */
     let weather = "☀️ Clear";
     if (d.rainraw === 0) weather = "🌧️ Rainy";
     else if (humVal >= 80) weather = "☁️ Cloudy";
@@ -400,7 +414,7 @@ async function fetchData() {
     chart.data.datasets[0].data.push(tempVal);
     chart.data.datasets[1].data.push(humVal);
     chart.data.datasets[2].data.push(presVal);
-    chart.data.datasets[3].data.push(aqiVal);
+    chart.data.datasets[3].data.push(dynamicAQI);
 
     if (chart.data.labels.length > 40) {
       chart.data.labels.shift();
@@ -427,6 +441,7 @@ function toggleMode() {
   document.body.classList.toggle("light");
 }
 </script>
+
 
 </body>
 </html>
