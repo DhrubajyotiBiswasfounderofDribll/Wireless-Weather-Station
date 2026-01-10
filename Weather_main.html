@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Weather Station Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+
+<style>
+/* ================= DARK BING-LIKE THEME ================= */
+:root{
+  --bg1:#100321;
+  --bg2:#332795;
+  --card:#0a1025;
+  --glass:rgba(255,255,255,0.06);
+  --accent:#00e4ff;
+  --text:#ffffff;
+  --muted:#9bb0ff;
+}
+
+body{
+  margin:0;
+  font-family:Segoe UI,Roboto,sans-serif;
+  background:radial-gradient(circle at top,var(--bg2),var(--bg1));
+  color:var(--text);
+  min-height:100vh;
+}
+
+/* ================= HEADER ================= */
+header{
+  padding:12px 24px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+header h1{
+  margin:0;
+  font-size:34px;
+  font-weight:900;
+}
+
+/* ================= TOP RIGHT CONTROLS ================= */
+.controls{
+  display:flex;
+  gap:10px;
+}
+button{
+  background:linear-gradient(135deg,#00e4ff,#7df9ff);
+  border:none;
+  padding:10px 16px;
+  border-radius:14px;
+  font-weight:700;
+  cursor:pointer;
+  box-shadow:0 0 20px #00e4ff66;
+}
+
+/* ================= HERO ================= */
+.hero{
+  padding:10px 26px 24px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+.temp-big{
+  font-size:92px;
+  font-weight:900;
+}
+.condition{
+  font-size:26px;
+  font-weight:800;
+  color:var(--muted);
+}
+
+/* ================= STATS ================= */
+.stats{
+  display:flex;
+  gap:18px;
+}
+.stat{
+    display: flex;
+    background: linear-gradient(145deg, var(--glass), transparent);
+    backdrop-filter: blur(16px);
+    padding: 18px 16px;
+    border-radius: 20px;
+    min-width: 130px;
+    box-shadow: 0 0 30px #000a;
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
+}
+.stat span{
+  font-size:13px;
+  opacity:.7;
+}
+.stat b{
+  font-size:22px;
+}
+
+/* ================= GRID ================= */
+.grid{
+  display:grid;
+  grid-template-columns:1fr 360px;
+  gap:26px;
+  padding:0 26px 26px;
+}
+
+/* ================= CARD ================= */
+.card{
+  background: linear-gradient(145deg, #1a0f33, #1a0d42);
+  border-radius:22px;
+  padding:18px;
+  box-shadow:0 0 35px #0008;
+}
+.card h3{
+  margin:0 0 10px;
+  color:var(--accent);
+}
+
+/* ================= CHART ================= */
+.chart-wrap{height:320px}
+canvas{width:100%!important;height:100%!important}
+
+/* ================================================= */
+/* 🔮 GLASSY NEON PRESSURE GAUGE — COPIED AS-IS */
+/* ================================================= */
+.gauge-wrap{
+  position:relative;
+  width:260px;
+  height:260px;
+  margin:auto;
+}
+.gauge svg{
+  width:100%;
+  height:100%;
+  transform:rotate(-90deg);
+  border-radius: 150px;
+}
+.gauge-glass{
+  position:absolute;
+  inset:22px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(14px);
+  box-shadow:
+    inset 0 0 25px rgba(255,255,255,0.12),
+    inset 0 0 60px rgba(0,228,255,0.12);
+}
+.ring-bg{
+  fill:none;
+  stroke:#062b36;
+  stroke-width:26;
+  opacity:0.55;
+}
+.ring-fg{
+  fill:none;
+  stroke:url(#pressureGradient);
+  stroke-width:26;
+  stroke-linecap:round;
+  stroke-dasharray:565;
+  stroke-dashoffset:565;
+  transition:
+    stroke-dashoffset .8s cubic-bezier(.4,0,.2,1),
+    filter .6s;
+  filter:
+    drop-shadow(0 0 18px currentColor)
+    drop-shadow(0 0 40px currentColor);
+  animation:pulse 3s infinite ease-in-out;
+}
+@keyframes pulse{
+  0%,100%{filter:drop-shadow(0 0 20px currentColor)}
+  50%{filter:drop-shadow(0 0 55px currentColor)}
+}
+.gauge-center{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+}
+.gauge-center .big{
+  font-size:34px;
+  font-weight:900;
+  background:linear-gradient(180deg,#ffffff,#9befff);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+.gauge-center .sub{
+  font-size:13px;
+  opacity:.85;
+}
+
+/* ================= WEATHER TEXT ================= */
+.weather{
+  font-size:28px;
+  font-weight:900;
+  text-align:center;
+}
+
+/* ================= CLOCK ================= */
+.clock{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  background:linear-gradient(145deg,rgba(255,255,255,0.08),transparent);
+  backdrop-filter:blur(16px);
+  padding:10px 16px;
+  border-radius:18px;
+  box-shadow:0 0 30px #0008;
+}
+
+.clock .time{
+  font-size:28px;
+  font-weight:900;
+  letter-spacing:2px;
+  background:linear-gradient(180deg,#ffffff,#7df9ff);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+
+.clock .date{
+  font-size:13px;
+  opacity:0.75;
+  letter-spacing:1px;
+}
+
+/* ================= LOCATION TEXT ================= */
+.location{
+  font-size:15px;
+  margin-top:4px;
+  opacity:0.75;
+  letter-spacing:0.5px;
+  font-weight: 500;
+}
+
+.locationdiv{
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    padding: 1px 1.2vw;
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Weather Dashboard</h1>
+  <div id="clock" class="clock">
+   <div class="time" id="clockTime">--:--:--</div>
+   <div class="date" id="clockDate">--</div>
+  </div>
+
+  <div class="controls">
+    <button onclick="simulate()">⚡ Simulate</button>
+    <button onclick="exportCSV()">📤 Export CSV</button>
+    <button onclick="clearHistory()">🗑 Clear Data</button>
+    <button onclick="showHourly()">🕒 Hourly Data</button>
+    <button onclick="connectArduino()">🔌 Connect Arduino</button>
+  </div>
+</header>
+
+<div class="locationdiv">
+   <div class="location" id="locationText">📍 Detecting location…</div>
+</div>
+
+<section class="hero">
+  <div>
+    <div class="temp-big" id="temp">--°C</div>
+    <div class="condition" id="condition">--</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span>Humidity</span><b id="hum">--%</b></div>
+    <div class="stat"><span>Altitude</span><b id="alt">-- m</b></div>
+    <div class="stat"><span>AQI</span><b id="aqi">--</b></div>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="card">
+    <h3>📊 Live Trends</h3>
+    <div class="chart-wrap">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔮 Atmospheric Pressure</h3>
+
+    <div class="gauge-wrap gauge">
+      <svg viewBox="0 0 200 200">
+        <defs>
+          <linearGradient id="pressureGradient" gradientUnits="userSpaceOnUse"
+            x1="0" y1="0" x2="200" y2="200">
+            <stop offset="0%" stop-color="#4da6ff"/>
+            <stop offset="50%" stop-color="#00e4ff"/>
+            <stop offset="100%" stop-color="#b44cff"/>
+          </linearGradient>
+        </defs>
+        <circle cx="100" cy="100" r="90" class="ring-bg"/>
+        <circle cx="100" cy="100" r="90" class="ring-fg" id="ring"/>
+      </svg>
+
+      <div class="gauge-glass"></div>
+
+      <div class="gauge-center">
+        <div class="big" id="press">-- hPa</div>
+        <div class="sub">Atmospheric Pressure</div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+
+<!-- ================= HOURLY POPUP ================= -->
+<div id="hourlyPopup" 
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:9999;justify-content:center;align-items:center;">
+  <div style="background:linear-gradient(145deg,#1a0f33,#1a0d42);padding:24px;border-radius:20px;max-width:900px;width:90%;max-height:90vh;overflow:auto;position:relative;">
+    
+    <button onclick="closeHourly()" style="position:absolute;top:12px;right:12px;padding:8px 12px;border:none;border-radius:8px;background:#ff4d6d;font-weight:700;cursor:pointer;">✖</button>
+    
+    <h3 style="color:#00e4ff;text-align:center;margin-bottom:16px;">🕒 Hourly History</h3>
+    
+    <div id="hourlyCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:20px;">
+      <!-- Hourly data cards will be injected here -->
+    </div>
+    
+    <div style="height:300px;">
+      <canvas id="hourlyChart"></canvas>
+    </div>
+    
+  </div>
+</div>
+
+<script>
+
+/* ========= SUPABASE KEYS ACCESS ======= */
+const supabaseClient = supabase.createClient(
+  "https://pdoleujjkhxczcqwuiah.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkb2xldWpqa2h4Y3pjcXd1aWFoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczNTA2MjMsImV4cCI6MjA4MjkyNjYyM30.L1y3B2PArmKL_wT5iozfdeKNbzsC0aKO1RJ9Dya7-O0"
+);
+
+
+/* ================= TOAST SYSTEM ================= */
+function toast(msg, type="info"){
+  const t = document.createElement("div");
+  t.innerText = msg;
+
+  t.style.position = "fixed";
+  t.style.bottom = "30px";
+  t.style.right = "30px";
+  t.style.padding = "14px 18px";
+  t.style.borderRadius = "14px";
+  t.style.fontWeight = "600";
+  t.style.zIndex = "9999";
+  t.style.backdropFilter = "blur(14px)";
+  t.style.background =
+    type==="success" ? "linear-gradient(145deg,#1affb8,#00c896)" :
+    type==="error"   ? "linear-gradient(145deg,#ff5f6d,#d7263d)" :
+                       "linear-gradient(145deg,#5ee7ff,#4facfe)";
+  t.style.color = "#000";
+  t.style.boxShadow = "0 0 25px #0008";
+
+  document.body.appendChild(t);
+
+  setTimeout(()=>t.remove(),3000);
+}
+
+/* =============  REAL-TIME FASTER RESPONSE =========== */
+
+function startRealtime(){
+  supabaseClient
+    .channel("weather-realtime")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "weather_data"
+      },
+      payload => {
+        // 🔥 Only update if Arduino is NOT connected
+        if(!arduinoConnected){
+          updateDashboard(payload.new);
+          toast("📡 Live cloud update", "success");
+        }
+      }
+    )
+    .subscribe();
+}
+
+
+/* ================= ARDUINO SERIAL ================= */
+let port, reader;
+let arduinoConnected = false;
+let lastSerialTime = 0;
+
+
+/* ================= CHART ================= */
+const chart = new Chart(document.getElementById("chart"),{
+  type:"line",
+  data:{
+    labels:[],
+    datasets:[
+      {label:"Temp",borderColor:"#00e4ff",data:[],tension:.4},
+      {label:"Humidity",borderColor:"#ff4d9a",data:[],tension:.4},
+      {label:"Pressure",borderColor:"#ffd166",data:[],tension:.4}
+    ]
+  },
+  options:{responsive:true,maintainAspectRatio:false}
+});
+
+/* ================= AQI DYNAMIC ENGINE ================= */
+let lastAQI = null;
+function getDynamicAQI(rawAQI) {
+  if (rawAQI === null || rawAQI === undefined || isNaN(rawAQI)) return null;
+  let base = rawAQI < 5 ? 15 + Math.random() * 10 : rawAQI;
+  let noise = Math.random() * 4 - 2;
+  if (lastAQI === null) lastAQI = base;
+  lastAQI = lastAQI * 0.85 + (base + noise) * 0.15;
+  return Math.max(0, Math.round(lastAQI));
+}
+
+/* ================= HOURLY DATA STORAGE (REAL HOURLY) ================= */
+let hourlyData = JSON.parse(localStorage.getItem("hourlyData") || "[]");
+let lastSavedHour = localStorage.getItem("lastSavedHour");
+
+function saveHourly(d){
+  const now = new Date();
+
+  // Hour key like "2026-01-08-19"
+  const hourKey =
+    now.getFullYear() + "-" +
+    (now.getMonth()+1) + "-" +
+    now.getDate() + "-" +
+    now.getHours();
+
+  // ⛔ already saved for this hour
+  if(lastSavedHour === hourKey) return;
+
+  lastSavedHour = hourKey;
+  localStorage.setItem("lastSavedHour", hourKey);
+
+  hourlyData.push({
+    time: now.getHours().toString().padStart(2,"0") + ":00",
+    temp: d.dhttemp,
+    hum: d.dhthumidity,
+    pressure: d.pressure,
+    aqi: getDynamicAQI(d.aqi)
+  });
+
+  // keep last 24 hours only
+  if(hourlyData.length > 24) hourlyData.shift();
+
+  localStorage.setItem("hourlyData", JSON.stringify(hourlyData));
+}
+
+function getWeatherCondition(d){
+  const temp = d.dhttemp;
+  const hum = d.dhthumidity;
+  const pressure = d.pressure;
+  const aqi = getDynamicAQI(d.aqi);
+  const rain = d.rainraw;
+
+  /* 🌧 Rain & Storm */
+  if (rain === 0 && hum > 80) return "⛈️ Stormy";
+  if (rain === 0) return "🌧️ Rainy";
+
+  /* 🌫 AQI based (priority override) */
+  if (aqi >= 300) return "☠️ Hazardous Air";
+  if (aqi >= 200) return "😷 Very Poor Air";
+  if (aqi >= 150) return "⚠️ Poor Air";
+  if (aqi >= 100) return "🌫️ Moderate Air";
+
+  /* 🔥 Heat conditions */
+  if (temp >= 38) return "🔥 Extreme Heat";
+  if (temp >= 32 && hum < 50) return "🌞 Hot & Dry";
+  if (temp >= 30 && hum > 70) return "🥵 Hot & Humid";
+
+  /* ❄ Cold conditions */
+  if (temp <= 5) return "🥶 Freezing";
+  if (temp <= 12) return "❄️ Cold";
+
+  /* ☁ Cloud & Humidity */
+  if (hum >= 85) return "☁️ Overcast";
+  if (hum >= 70) return "🌥️ Cloudy";
+
+  /* 🌬 Windy (pressure heuristic) */
+  if (pressure < 990) return "🌬️ Windy / Low Pressure";
+
+  /* ☀ Default */
+  return "☀️ Clear";
+}
+
+
+/* ================= FETCH LIVE DATA ================= */
+async function fetchData(){
+  const { data, error } = await supabaseClient
+    .from("weather_data")
+    .select("*")
+    .order("id", { ascending: false })
+    .limit(1);
+
+  if(error){
+    console.error(error);
+    toast("❌ Supabase fetch failed", "error");
+    return;
+  }
+
+  if(!data || !data.length) return;
+
+  updateDashboard(data[0]);
+}
+
+
+setInterval(()=>{
+  // If Arduino silent for 5 sec → fallback
+  if(arduinoConnected && Date.now() - lastSerialTime > 5000){
+    arduinoConnected = false;
+    toast("⚠️ Arduino lost — cloud fallback active", "info");
+  }
+
+  if(!arduinoConnected && !simulateMode){
+    fetchData();
+  }
+},1100);
+
+
+fetchData();
+startRealtime();
+
+
+
+async function readSerial(){
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try{
+    while(arduinoConnected){
+      const { value, done } = await reader.read();
+      if(done) throw "Disconnected";
+
+      lastSerialTime = Date.now();
+      buffer += decoder.decode(value);
+
+      let lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      lines.forEach(l=>{
+        parseArduinoData(l.trim());
+      });
+    }
+  }catch(e){
+    arduinoConnected = false;
+    toast("🔌 Arduino disconnected — switched to cloud", "info");
+  }
+}
+
+
+async function connectArduino(){
+  try{
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 9600 });
+    reader = port.readable.getReader();
+
+    arduinoConnected = true;
+    toast("🟢 Arduino connected", "success");
+
+    readSerial();
+  }catch(err){
+    toast("❌ Arduino connection failed", "error");
+    console.error(err);
+  }
+}
+
+function updateDashboard(d){
+  if(isNaN(d.dhttemp)) return;
+
+  temp.innerText = d.dhttemp.toFixed(1)+"°C";
+  hum.innerText = d.dhthumidity.toFixed(0)+"%";
+  alt.innerText = d.altitude.toFixed(1)+" m";
+  aqi.innerText = getDynamicAQI(d.aqi) ?? "--";
+  press.innerText = d.pressure.toFixed(2)+" hPa";
+  ring.style.strokeDashoffset = 565*(1-Math.min(1,(d.pressure-900)/200));
+  condition.innerText = getWeatherCondition(d);
+
+  chart.data.labels.push("");
+  chart.data.datasets[0].data.push(d.dhttemp);
+  chart.data.datasets[1].data.push(d.dhthumidity);
+  chart.data.datasets[2].data.push(d.pressure);
+
+  if(chart.data.labels.length>30){
+    chart.data.labels.shift();
+    chart.data.datasets.forEach(ds=>ds.data.shift());
+  }
+  chart.update();
+
+  saveHourly(d);
+}
+
+function parseArduinoData(line){
+  const p = line.split(",");
+  if(p.length < 8) return;
+
+  const d = {
+    dhttemp: parseFloat(p[0]),
+    dhthumidity: parseFloat(p[1]),
+    bmptemp: parseFloat(p[2]),
+    pressure: parseFloat(p[3]),
+    altitude: parseFloat(p[4]),
+    rainstatus: p[5],
+    rainraw: parseInt(p[6]),
+    aqi: parseFloat(p[7])
+  };
+
+  updateDashboard(d);
+}
+
+
+
+/* ================= BUTTONS ================= */
+let simulateMode = false;
+let simulateInterval = null;
+
+function simulate(){
+  simulateMode = !simulateMode;
+  if(simulateMode){
+    toast("⚡ Simulation ON", "info");
+    simulateInterval = setInterval(()=>{
+      const fake = {
+        dhttemp:20+Math.random()*15,
+        dhthumidity:40+Math.random()*40,
+        pressure:950+Math.random()*80,
+        altitude:120+Math.random()*5,
+        aqi: Math.random()*80,
+        rainraw: Math.random()>0.7?0:1
+      };
+      // Update live display
+      temp.innerText = fake.dhttemp.toFixed(1)+"°C";
+      hum.innerText = fake.dhthumidity.toFixed(0)+"%";
+      alt.innerText = fake.altitude.toFixed(1)+" m";
+      aqi.innerText = getDynamicAQI(fake.aqi);
+      press.innerText = fake.pressure.toFixed(2)+" hPa";
+      ring.style.strokeDashoffset = 565*(1-Math.min(1,(fake.pressure-900)/200));
+      chart.data.labels.push("");
+      chart.data.datasets[0].data.push(fake.dhttemp);
+      chart.data.datasets[1].data.push(fake.dhthumidity);
+      chart.data.datasets[2].data.push(fake.pressure);
+      if(chart.data.labels.length>30){
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds=>ds.data.shift());
+      }
+      chart.update();
+    },3000);
+  }else{
+    toast("🟢 Simulation OFF", "success");
+    clearInterval(simulateInterval);
+  }
+}
+
+function clearHistory(){
+  chart.data.labels=[];
+  chart.data.datasets.forEach(ds=>ds.data=[]);
+  chart.update();
+  localStorage.removeItem("hourlyData");
+  localStorage.removeItem("lastSavedHour");
+  hourlyData = [];
+}
+
+/* ================= HOURLY POPUP ================= */
+function showHourly(){
+  const container = document.getElementById("hourlyCards");
+  container.innerHTML = "";
+
+  hourlyData.forEach(d => {
+    const card = document.createElement("div");
+    card.style.background = "linear-gradient(145deg,rgba(255,255,255,0.06),transparent)";
+    card.style.backdropFilter = "blur(12px)";
+    card.style.padding = "12px";
+    card.style.borderRadius = "14px";
+    card.style.textAlign = "center";
+    card.style.boxShadow = "0 0 18px #0008";
+    card.innerHTML = `
+      <b>${d.time}</b><br>
+      Temp: ${d.temp.toFixed(1)}°C<br>
+      Humidity: ${d.hum.toFixed(0)}%<br>
+      Pressure: ${d.pressure.toFixed(1)} hPa<br>
+      AQI: ${d.aqi}
+    `;
+    container.appendChild(card);
+  });
+
+  const canvas = document.getElementById("hourlyChart");
+  const ctx = canvas.getContext("2d");
+
+  // ✅ SAFE destroy
+  if (window.hourlyChart instanceof Chart) {
+    window.hourlyChart.destroy();
+  }
+
+  // ✅ CREATE NEW CHART
+  window.hourlyChart = new Chart(ctx,{
+    type:"line",
+    data:{
+      labels: hourlyData.map(d=>d.time),
+      datasets:[
+        { label:"Temp", data:hourlyData.map(d=>d.temp), borderColor:"#00e4ff", tension:0.3 },
+        { label:"Humidity", data:hourlyData.map(d=>d.hum), borderColor:"#ff4d9a", tension:0.3 },
+        { label:"Pressure", data:hourlyData.map(d=>d.pressure), borderColor:"#ffd166", tension:0.3 },
+        { label:"AQI", data:hourlyData.map(d=>d.aqi), borderColor:"#7df2a6", tension:0.3 }
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{legend:{labels:{color:"#fff"}}},
+      scales:{
+        x:{ticks:{color:"#fff"}},
+        y:{ticks:{color:"#fff"}}
+      }
+    }
+  });
+
+  document.getElementById("hourlyPopup").style.display = "flex";
+}
+
+function closeHourly(){
+  document.getElementById("hourlyPopup").style.display="none";
+}
+
+async function exportCSV(){
+  toast("📤 Preparing full data export…", "info");
+
+  try{
+    const { data, error } = await supabaseClient
+      .from("weather_data")
+      .select("*")
+      .order("created_at", { ascending: true });
+
+    if(error){
+      console.error(error);
+      toast("❌ Failed to fetch data", "error");
+      return;
+    }
+
+    if(!data || data.length === 0){
+      toast("⚠️ No data available to export", "info");
+      return;
+    }
+
+    // CSV header
+    let csv =
+      "Time,Temperature (°C),Humidity (%),BMP Temp (°C),Pressure (hPa),Altitude (m),Rain Status,Rain Raw,AQI\n";
+
+    // rows
+    data.forEach(d=>{
+      csv +=
+        `${new Date(d.created_at).toLocaleString()},` +
+        `${Number(d.dhttemp).toFixed(2)},` +
+        `${Number(d.dhthumidity).toFixed(0)},` +
+        `${Number(d.bmptemp ?? 0).toFixed(2)},` +
+        `${Number(d.pressure).toFixed(2)},` +
+        `${Number(d.altitude).toFixed(2)},` +
+        `${d.rainstatus ?? ""},` +
+        `${d.rainraw},` +
+        `${d.aqi}\n`;
+    });
+
+    // download
+    const blob = new Blob([csv], { type:"text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "weather_station_full_data.csv";
+    document.body.appendChild(a);
+    a.click();
+
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast(`✅ Exported ${data.length} records`, "success");
+
+  }catch(e){
+    console.error(e);
+    toast("❌ Export failed", "error");
+  }
+}
+
+function startClock(){
+  const timeEl = document.getElementById("clockTime");
+  const dateEl = document.getElementById("clockDate");
+
+  function update(){
+    const now = new Date();
+
+    const time =
+      now.getHours().toString().padStart(2,"0") + ":" +
+      now.getMinutes().toString().padStart(2,"0") + ":" +
+      now.getSeconds().toString().padStart(2,"0");
+
+    const date =
+      now.toLocaleDateString(undefined,{
+        weekday:"long",
+        day:"2-digit",
+        month:"long",
+        year:"numeric"
+      });
+
+    timeEl.textContent = time;
+    dateEl.textContent = date;
+  }
+
+  update();
+  setInterval(update,1000);
+}
+
+startClock();
+
+function startLocation(){
+  const locEl = document.getElementById("locationText");
+
+  if(!navigator.geolocation){
+    locEl.textContent = "📍 Location unavailable";
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async pos => {
+      const lat = pos.coords.latitude.toFixed(5);
+      const lon = pos.coords.longitude.toFixed(5);
+
+      try{
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+        );
+        const data = await res.json();
+        const addr = data.address || {};
+
+        const city =
+          addr.city ||
+          addr.town ||
+          addr.village ||
+          addr.suburb ||
+          addr.county ||
+          "Unknown";
+
+        const state = addr.state || "";
+        const country = addr.country || "";
+
+        locEl.textContent = `📍 ${city}, ${state}, ${country}`;
+      }catch(e){
+        locEl.textContent = `📍 ${lat}, ${lon}`;
+      }
+    },
+    () => {
+      locEl.textContent = "📍 Location permission denied";
+    },
+    { enableHighAccuracy:false, timeout:8000 }
+  );
+}
+
+startLocation();
+
+
+</script>
+
+</body>
+</html>
